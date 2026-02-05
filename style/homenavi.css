@@ -1,0 +1,106 @@
+/* ================= NAVBAR ================= */
+.navbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: var(--primary-light); /* matching system primary color */
+    padding: 15px 40px;
+    position: sticky;
+    top: 0;
+    width: 100%;
+    z-index: 1000;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    transition: background 0.3s;
+}
+
+.navbar-left {
+    display: flex;
+    align-items: center;
+    text-decoration: none;
+    color: white;
+}
+
+.navbar-left img {
+    max-width: 40px;
+    margin-right: 12px;
+}
+
+.barangay-name {
+    font-weight: 700;
+    font-size: 18px;
+    color: #ffffff;
+}
+
+.navbar-right {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 25px;
+}
+
+/* ================= NAVBAR BUTTONS ================= */
+.navbar-right a {
+    color: #ffffff;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 15px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    transition: background 0.3s, transform 0.2s;
+}
+
+/* Make REGISTER & LOGIN look like actual buttons */
+.navbar-right a.register-btn,
+.navbar-right a.login-btn {
+    padding: 10px 20px;
+    border-radius: 25px;
+    font-weight: 700;
+    font-size: 15px;
+    text-align: center;
+}
+
+/* REGISTER button style */
+.navbar-right a.register-btn {
+    background-color: #3b82f6; /* soft accent blue */
+    color: white;
+}
+
+.navbar-right a.register-btn:hover {
+    background-color: #2563eb;
+    transform: translateY(-2px);
+}
+
+/* LOGIN button style */
+.navbar-right a.login-btn {
+    background-color: white;
+    color: var(--primary);
+    border: 2px solid var(--primary);
+}
+
+.navbar-right a.login-btn:hover {
+    background-color: var(--primary-light);
+    color: white;
+    transform: translateY(-2px);
+}
+
+
+/* Responsive */
+@media (max-width: 768px) {
+    .navbar {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 15px 20px;
+    }
+
+    .navbar-right {
+        width: 100%;
+        justify-content: flex-start;
+        margin-top: 10px;
+        gap: 15px;
+    }
+
+    .navbar-right a {
+        font-size: 16px;
+        padding: 10px 14px;
+    }
+}

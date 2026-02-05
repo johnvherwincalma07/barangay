@@ -1,0 +1,393 @@
+<?php
+include('connection.php');
+
+date_default_timezone_set('Asia/Manila');
+
+$user = $_SESSION['username'] ?? '';
+$msg = '';
+
+// Generate CSRF token if not set
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
+// Handle cropped image upload
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    $csrfToken = $_POST['csrf_token'] ?? '';
+    $targetDir = "uploads/";
+
+    if (hash_equals($_SESSION['csrf_token'], $csrfToken)) {
+        // Cropped image upload
+        if (isset($_FILES["cropped_image"])) {
+            $imgName = 'profile_' . time() . '.png';
+            $targetPath = $targetDir . $imgName;
+
+            if (move_uploaded_file($_FILES['cropped_image']['tmp_name'], $targetPath)) {
+                $update = "UPDATE users SET profile_photo='$imgName' WHERE username='$user'";
+                mysqli_query($conn, $update);
+                $msg = "Profile photo updated!";
+            } else {
+                $msg = "Error uploading cropped image.";
+            }
+        }
+
+        // Regular image upload
+        elseif (isset($_FILES["profile_photo"])) {
+            $fileType = strtolower(pathinfo($_FILES["profile_photo"]["name"], PATHINFO_EXTENSION));
+            $allowedTypes = ['jpg', 'jpeg', 'png', 'gif'];
+            if (in_array($fileType, $allowedTypes)) {
+                $imgName = 'profile_' . time() . '.' . $fileType;
+                $targetPath = $targetDir . $imgName;
+
+                if (move_uploaded_file($_FILES["profile_photo"]["tmp_name"], $targetPath)) {
+                    $update = "UPDATE users SET profile_photo='$imgName' WHERE username='$user'";
+                    mysqli_query($conn, $update);
+                    $msg = "Profile photo updated!";
+                } else {
+                    $msg = "Error uploading image.";
+                }
+            } else {
+                $msg = "Invalid file type.";
+            }
+        }
+    } else {
+        $msg = "Invalid CSRF token.";
+    }
+}
+
+// Fetch profile photo
+$query = "SELECT * FROM users WHERE username='$user'";
+$result = mysqli_query($conn, $query);
+$data = mysqli_fetch_assoc($result);
+$profilePic = !empty($data['profile_photo']) ? $data['profile_photo'] : 'default.png';
+?>
+
+
+<style>
+    .profile-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    padding: 5px 10px;
+    border-radius: 25px;
+    background-color: #2c2c6c;
+    color: #fff;
+    transition: background-color 0.3s;
+}
+
+.profile-wrapper:hover {
+    background-color: #3a3a8c;
+}
+
+.profile-pic {
+    width: 35px;
+    height: 35px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #fff;
+}
+
+.username {
+    color: #fff;
+    font-weight: 500;
+    font-size: 14px;
+}
+
+.dropdown-icon {
+    color: #fff;
+    font-size: 14px;
+}
+
+.dropdown-panel {
+    position: absolute;
+    top: 70px;
+    right: 10px;
+    background-color: #2c2c6c;
+    width: 250px;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    display: none;
+    flex-direction: column;
+    z-index: 999;
+    overflow: hidden;
+    color: white;
+}
+
+
+.profile-pic-container {
+    position: relative;
+    width: 110px;
+    height: 110px;    
+}
+
+.dropdown-header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 15px 0;
+    text-align: center;
+}
+
+
+.dropdown-profile-pic {
+    width: 110px;
+    height: 110px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid white;
+    overflow: hidden;
+}
+
+.camera-icon {
+    position: absolute;
+    bottom: 5px;
+    right: 5px;
+    background-color: rgba(0, 0, 0, 0.6);
+    color: white;
+    padding: 6px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.user-info strong {
+    display: block;
+    font-size: 18px;
+    color: white;
+}
+
+#profileUpload {
+    display: none;
+}
+
+.dropdown-divider {
+    border: none;
+    height: 1px;
+    background-color: white;
+    margin: 5px 0;
+}
+
+.dropdown-panel a {
+    padding: 10px 15px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+    color: white;
+    font-size: 14px;
+    transition: background 0.3s;
+    margin-bottom: 5px;
+
+}
+.dropdown-panel a:hover {
+    background-color: #4040a0;
+}
+#imagePreviewModal {
+  display: none;
+  position: fixed;
+  z-index: 1050;
+  background: rgba(0,0,0,0.8);
+  top: 0; left: 0; right: 0; bottom: 0;
+  justify-content: center;
+  align-items: center;
+}
+#cropArea img {
+  max-width: 100%;
+  max-height: 80vh;
+}
+
+.profile-right-container {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding-right: 10px;
+}
+
+.datetime {
+    color: white;
+    font-size: 14px;
+    white-space: nowrap;
+}
+
+</style>
+
+<link rel="stylesheet" href="css/font_awesome.min.css">
+<link rel="stylesheet" href="style/adminstyle.css">
+<link rel="stylesheet" href="css/cropper.min.css">
+
+<nav class="navbar">
+
+    <div class="navbar-left">
+        <button id="toggleBtn"><i class="fa fa-bars"></i></button>
+        <a href="newadmin.php">
+            <img src="images/bgLogo.png" alt="Barangay Amaya I Logo">
+        </a>
+        <span class="barangay-name">Barangay Management System</span>
+    </div>
+
+
+    <div class="navbar-right">
+    <div class="profile-right-container">
+        <span class="datetime">
+            <i class="fa fa-clock-o"></i>
+            <?php echo date('l, F j, Y - h:i A'); ?>
+        </span>
+        <div class="profile-wrapper" onclick="toggleDropdown()">
+            <img src="uploads/<?= htmlspecialchars($profilePic) ?>" alt="Profile" class="profile-pic">
+            <span class="username"><?= htmlspecialchars($data['username']) ?></span>
+            <i class="fa fa-caret-down dropdown-icon"></i>
+        </div>
+    </div>
+
+
+    <div class="dropdown-panel" id="dropdownMenu">
+        <div class="dropdown-header">
+            <form method="POST" enctype="multipart/form-data" id="profilePicForm">
+                <label for="profileUpload" class="profile-pic-container" style="cursor: pointer;">
+                    <img src="uploads/<?= htmlspecialchars($profilePic) ?>" alt="Profile" class="dropdown-profile-pic">
+                    <div class="camera-icon">
+                        <i class="fa fa-camera"></i>
+                    </div>
+                    <input type="file" name="profile_photo" id="profileUpload" accept="image/*" style="display: none;">
+                </label>
+            </form>
+            <div class="user-info">
+                <strong><?= htmlspecialchars($data['username']) ?></strong>
+            </div>
+        </div>
+        <hr class="dropdown-divider">
+        <a href="#" onclick="showLogoutModal()"><i class="fa fa-sign-out"></i> Logout</a>
+    </div>
+</div>
+</nav>
+
+<div class="sidebar" id="sidebar">
+    <ul class="sidebar-menu">
+        <li><a href="newadmin.php" data-label="Home"><i class="fa fa-fw fa-home"></i> <span>Home</span></a></li>
+        <li><a href="newdashboard.php" data-label="Dashboard"><i class="fa fa-fw fa-dashboard"></i> <span>Dashboard</span></a></li>
+        <li><a href="newresident.php" data-label="Add Resident"><i class="fa fa-fw fa-user-plus"></i> <span>Residents</span></a></li>
+        <li><a href="newhousehold.php" data-label="Household"><i class="fa fa-fw fa-users"></i> <span>Household</span></a></li>
+        <li><a href="newofficial.php" data-label="Barangay Officials"><i class="fa fa-fw fa-user"></i> <span>Barangay Officials</span></a></li>
+        <li><a href="newannounce.php" data-label="Announcements"><i class="fa fa-fw fa-bullhorn"></i> <span>Announcements</span></a></li>
+        <li><a href="newblotter.php" data-label="Blotter"><i class="fa fa-fw fa-file"></i> <span>Blotter</span></a></li>
+        <li><a href="newforms.php" data-label="Document Requests"><i class="fa fa-fw fa-folder"></i> <span>Document Requests</span></a></li>
+    </ul>
+</div>
+
+
+<!-- Modal for Cropping -->
+<div id="imagePreviewModal">
+  <div id="cropArea">
+    <img id="imageToCrop" src="">
+    <br>
+    <form method="POST" enctype="multipart/form-data" id="croppedImageForm">
+        <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
+        <button type="button" onclick="cropAndUpload()">Crop & Upload</button>
+        <button type="button" onclick="closeModal()">Cancel</button>
+    </form>
+  </div>
+</div>
+
+
+<!-- Change Username & Password Modal -->
+<div id="changeCredentialsModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background-color:rgba(0,0,0,0.5); z-index:2000; align-items:center; justify-content:center;">
+    <div style="background:#fff; padding:20px; border-radius:10px; width:400px; max-width:90%;">
+        <h3>Update Credentials</h3>
+        <form method="POST" action="update_credentials.php">
+        <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+        <div>
+            <label>New Username</label>
+            <input type="text" name="new_username" required class="form-control">
+        </div>
+        <div>
+            <label>New Password</label>
+            <input type="password" name="new_password" required class="form-control">
+        </div>
+        <div style="margin-top:10px; display:flex; justify-content:end; gap:10px;">
+            <button type="button" onclick="closeCredentialModal()" class="btn btn-secondary">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openCredentialModal() {
+  document.getElementById('changeCredentialsModal').style.display = 'flex';
+}
+
+function closeCredentialModal() {
+  document.getElementById('changeCredentialsModal').style.display = 'none';
+}
+</script>
+
+
+
+
+<script src="js/cropper.min.js"></script>
+<script>
+let cropper;
+
+// File selected — open crop modal
+    document.getElementById('profileUpload').addEventListener('change', function (e) {
+    const file = e.target.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function () {
+        document.getElementById('imageToCrop').src = reader.result;
+        document.getElementById('imagePreviewModal').style.display = 'flex';
+        if (cropper) cropper.destroy();
+        cropper = new Cropper(document.getElementById('imageToCrop'), {
+            aspectRatio: 1,
+            viewMode: 1
+        });
+        };
+        reader.readAsDataURL(file);
+    }
+    });
+
+    function cropAndUpload() {
+    const canvas = cropper.getCroppedCanvas({
+        width: 300,
+        height: 300,
+    });
+
+    canvas.toBlob(function (blob) {
+        const formData = new FormData(document.getElementById('croppedImageForm'));
+        formData.append('cropped_image', blob);
+
+        fetch('', {
+        method: 'POST',
+        body: formData,
+        }).then(res => res.text())
+        .then(data => {
+            alert('Profile updated!');
+            window.location.reload();
+        });
+    });
+    }
+
+    function closeModal() {
+    document.getElementById('imagePreviewModal').style.display = 'none';
+    if (cropper) cropper.destroy();
+    }
+
+    function toggleDropdown() {
+        const menu = document.getElementById("dropdownMenu");
+        menu.style.display = menu.style.display === "flex" ? "none" : "flex";
+    }
+
+    window.addEventListener('click', function(e) {
+        const menu = document.getElementById("dropdownMenu");
+        const profileWrapper = document.querySelector(".profile-wrapper");
+        if (!profileWrapper.contains(e.target) && !menu.contains(e.target)) {
+            menu.style.display = "none";
+        }
+    });
+
+</script>
